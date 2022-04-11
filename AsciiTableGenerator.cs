@@ -9,6 +9,7 @@ namespace AsciiTableGenerators
 		private const string COLUMN_SEPARATOR = " | ";
 		private const string ALIGN_CHAR = " ";
 		private const string HEADER_SEPARATOR = "-";
+		private const int SKIP_HEADER_SEPARATORS = 2;
 		
 		public static StringBuilder CreateAsciiTableFromDataTable(DataTable table)
 		{
@@ -33,7 +34,14 @@ namespace AsciiTableGenerators
 					rowsLengths[rowIndex] = table.Rows[rowIndex][columnIndex].ToString()?.Trim().Length ?? 0;
 				}
 
-				lengthByColumn[columnIndex] = Math.Max(rowsLengths.Max(), table.Columns[columnIndex].ColumnName.Trim().Length);
+				if (rowsLengths.Length == 0)
+				{
+					lengthByColumn[columnIndex] = table.Columns[columnIndex].ColumnName.Trim().Length;
+				}
+				else
+				{
+					lengthByColumn[columnIndex] = Math.Max(rowsLengths.Max(), table.Columns[columnIndex].ColumnName.Trim().Length);
+				}
 			}
 
 			return lengthByColumn;
@@ -49,7 +57,8 @@ namespace AsciiTableGenerators
 			}
 
 			tableBuilder.AppendLine();
-			tableBuilder.AppendLine(string.Join("", Enumerable.Repeat(HEADER_SEPARATOR, tableBuilder.ToString().Length - 3).ToArray()));
+			// Skipping separators is needed because tableBuilder.Lenght contains also invisible characters like \n. 11.04.2022. Artem Yurchenko
+			tableBuilder.AppendLine(string.Join("", Enumerable.Repeat(HEADER_SEPARATOR, tableBuilder.Length - SKIP_HEADER_SEPARATORS).ToArray()));
 		}
 
 		private static string ToTitleCase(string columnName)
