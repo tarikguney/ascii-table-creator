@@ -1,92 +1,97 @@
-﻿using System.Collections.Generic;
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 
 namespace AsciiTableGenerators
 {
-    public class AsciiTableGenerator
-    {
-        public static StringBuilder CreateAsciiTableFromDataTable(DataTable table)
-        {
-            var lenghtByColumnDictionary = GetTotalSpaceForEachColumn(table);
+	public static class AsciiTableGenerator
+	{
+		private const string COLUMN_SEPARATOR = " | ";
+		private const string ALIGN_CHAR = " ";
+		private const string HEADER_SEPARATOR = "-";
+		private const int SKIP_HEADER_SEPARATORS = 2;
+		
+		public static StringBuilder CreateAsciiTableFromDataTable(DataTable table)
+		{
+			var tableBuilder = new StringBuilder();
+			var lengthByColumn = GetLengthByColumn(table);
+			AppendColumns(table, tableBuilder, lengthByColumn);
+			AppendRows(table, tableBuilder, lengthByColumn);
 
-            var tableBuilder = new StringBuilder();
-            AppendColumns(table, tableBuilder, lenghtByColumnDictionary);
-            AppendRows(table, lenghtByColumnDictionary, tableBuilder);
-            return tableBuilder;
-        }
+			return tableBuilder;
+		}
 
-        private static void AppendRows(DataTable table, IReadOnlyDictionary<int, int> lenghtByColumnDictionary,
-            StringBuilder tableBuilder)
-        {
-            for (var i = 0; i < table.Rows.Count; i++)
-            {
-                var rowBuilder = new StringBuilder();
-                for (var j = 0; j < table.Columns.Count; j++)
-                {
-                    rowBuilder.Append(PadWithSpaceAndSeperator(table.Rows[i][j].ToString().Trim(),
-                        lenghtByColumnDictionary[j]));
-                }
-                tableBuilder.AppendLine(rowBuilder.ToString());
-            }
-        }
+		private static Dictionary<int, int> GetLengthByColumn(DataTable table)
+		{
+			var lengthByColumn = new Dictionary<int, int>();
 
-        private static void AppendColumns(DataTable table, StringBuilder builder,
-            IReadOnlyDictionary<int, int> lenghtByColumnDictionary)
-        {
-            for (var i = 0; i < table.Columns.Count; i++)
-            {
-                var columName = table.Columns[i].ColumnName.Trim();
-                var paddedColumNames = PadWithSpaceAndSeperator(ToTitleCase(columName), lenghtByColumnDictionary[i]);
-                builder.Append(paddedColumNames);
-            }
-            builder.AppendLine();
-            builder.AppendLine(string.Join("", Enumerable.Repeat("-", builder.ToString().Length - 3).ToArray()));
-        }
+			for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
+			{
+				var rowsLengths = new int[table.Rows.Count];
 
-        private static string ToTitleCase(string columnName)
-        {
-            return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(columnName.Replace("_", " "));
-        }
+				for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
+				{
+					rowsLengths[rowIndex] = table.Rows[rowIndex][columnIndex].ToString()?.Trim().Length ?? 0;
+				}
 
-        private static Dictionary<int, int> GetTotalSpaceForEachColumn(DataTable table)
-        {
-            var lengthByColumn = new Dictionary<int, int>();
-            for (var i = 0; i < table.Columns.Count; i++)
-            {
-                var length = new int[table.Rows.Count];
-                for (var j = 0; j < table.Rows.Count; j++)
-                {
-                    length[j] = table.Rows[j][i].ToString().Trim().Length;
-                }
-                lengthByColumn[i] = length.Max();
-            }
-            return CompareToColumnNameLengthAndUpdate(table, lengthByColumn);
-        }
+				if (rowsLengths.Length == 0)
+				{
+					lengthByColumn[columnIndex] = table.Columns[columnIndex].ColumnName.Trim().Length;
+				}
+				else
+				{
+					lengthByColumn[columnIndex] = Math.Max(rowsLengths.Max(), table.Columns[columnIndex].ColumnName.Trim().Length);
+				}
+			}
 
-        private static Dictionary<int, int> CompareToColumnNameLengthAndUpdate(DataTable table,
-            IReadOnlyDictionary<int, int> lenghtByColumnDictionary)
-        {
-            var dictionary = new Dictionary<int, int>();
-            for (var i = 0; i < table.Columns.Count; i++)
-            {
-                var columnNameLength = table.Columns[i].ColumnName.Trim().Length;
-                dictionary[i] = columnNameLength > lenghtByColumnDictionary[i]
-                    ? columnNameLength
-                    : lenghtByColumnDictionary[i];
-            }
-            return dictionary;
-        }
+			return lengthByColumn;
+		}
 
-        private static string PadWithSpaceAndSeperator(string value, int totalColumnLength)
-        {
-            var remaningSpace = value.Length < totalColumnLength
-                ? totalColumnLength - value.Length
-                : value.Length - totalColumnLength;
-            var spaces = string.Join("", Enumerable.Repeat(" ", remaningSpace).ToArray());
-            return value + spaces + " | ";
-        }
-    }
+		private static void AppendColumns(DataTable table, StringBuilder tableBuilder, IReadOnlyDictionary<int, int> lengthByColumn)
+		{
+			for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
+			{
+				var columName = table.Columns[columnIndex].ColumnName.Trim();
+				var paddedColumNames = AlignValueAndAddSeparator(ToTitleCase(columName), lengthByColumn[columnIndex]);
+				tableBuilder.Append(paddedColumNames);
+			}
+
+			tableBuilder.AppendLine();
+			// Skipping separators is needed because tableBuilder.Lenght contains also invisible characters like \n. 11.04.2022. Artem Yurchenko
+			tableBuilder.AppendLine(string.Join("", Enumerable.Repeat(HEADER_SEPARATOR, tableBuilder.Length - SKIP_HEADER_SEPARATORS).ToArray()));
+		}
+
+		private static string ToTitleCase(string columnName)
+		{
+			return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(columnName.Replace("_", " "));
+		}
+
+		private static void AppendRows(DataTable table, StringBuilder tableBuilder, IReadOnlyDictionary<int, int> lengthByColumn)
+		{
+			for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
+			{
+				var rowBuilder = new StringBuilder();
+
+				for (var columnIndex = 0; columnIndex < table.Columns.Count; columnIndex++)
+				{
+					rowBuilder.Append(AlignValueAndAddSeparator(table.Rows[rowIndex][columnIndex].ToString()?.Trim(), lengthByColumn[columnIndex]));
+				}
+
+				tableBuilder.AppendLine(rowBuilder.ToString());
+			}
+		}
+
+		private static string AlignValueAndAddSeparator(string? value, int columnLength)
+		{
+			var spaces = string.Empty;
+			
+			if (value != null)
+			{
+				var remainingSpace = value.Length < columnLength ? columnLength - value.Length : value.Length - columnLength;
+				spaces = string.Join("", Enumerable.Repeat(ALIGN_CHAR, remainingSpace).ToArray());
+			}
+
+			return value + spaces + COLUMN_SEPARATOR;
+		}
+	}
 }
